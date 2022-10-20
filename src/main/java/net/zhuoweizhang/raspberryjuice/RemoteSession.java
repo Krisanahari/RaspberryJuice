@@ -27,6 +27,8 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.util.Vector;
 
+import com.macasaet.fernet.*;
+
 public class RemoteSession {
 
 	private final LocationType locationType;
@@ -1000,7 +1002,18 @@ public class RemoteSession {
 			plugin.getLogger().info("Starting input thread");
 			while (running) {
 				try {
-					String newLine = in.readLine();
+					String newLine = in.readLine(); //convert bytes to string
+					String[] vals = newLine.split(":yek"); //identifiy key
+					try {
+						final Key key = new Key(vals[1]); //deserialise key
+						final Token token = Token.fromString(vals[0]); //deserialise msg
+						final Validator<String> validator = new StringValidator() {
+						};
+						final String payload = token.validateAndDecrypt(key, validator); //check msg and key is the same
+						newLine = payload;
+					} catch (Exception e) {
+						newLine = "chat.post(Data has been tampered!)";
+					}
 					//System.out.println(newLine);
 					if (newLine == null) {
 						running = false;
