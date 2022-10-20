@@ -997,6 +997,7 @@ public class RemoteSession {
 	}
 
 	/** socket listening thread */
+	@Override
 	private class InputThread implements Runnable {
 		public void run() {
 			plugin.getLogger().info("Starting input thread");
