@@ -6,9 +6,12 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Iterator;
+
+import javax.xml.validation.Validator;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -27,7 +30,15 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.util.Vector;
 
-import com.macasaet.fernet.*;
+import javax.crypto.Cipher;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.SecureRandom;
+import java.security.spec.KeySpec;
+import java.util.Arrays;
+import java.util.Base64;
 
 public class RemoteSession {
 
@@ -996,24 +1007,85 @@ public class RemoteSession {
 		close();
 	}
 
+	public static String decrypt(String key, String ciphertext) {
+		try{
+			byte[] cipherbytes = Base64.getDecoder().decode(ciphertext);
+			byte[] initVector = new byte[16];
+			byte[] messagebytes = new byte[cipherbytes.length - 15];
+
+			System.arraycopy(cipherbytes,0,initVector,0,16);
+			System.arraycopy(cipherbytes,16, messagebytes, 0,cipherbytes.length);
+
+			IvParameterSpec iv = new IvParameterSpec(initVector);
+            SecretKeySpec skeySpec = new SecretKeySpec(key.getBytes("UTF-8"), "AES");
+
+			Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+            cipher.init(Cipher.DECRYPT_MODE, skeySpec, iv);
+
+			byte[] byte_array = cipher.doFinal(messagebytes);
+			return new String(byte_array, StandardCharsets.UTF_8);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return null;
+	}
+
+	private static final String FACTORY_INSTANCE = "PBKDF2WithHmacSHA256";
+    private static final String CIPHER_INSTANCE = "AES/CBC/PKCS5PADDING";
+    private static final String SECRET_KEY_TYPE = "AES";
+    private static final byte[] IV_CODE = new byte[16];
+    private static final String SECRET_KEY = "yourSecretKey";
+    private static final int ITERATION_COUNT = 65536;
+    private static final int KEY_LENGTH = 256;
+
+	public static String encrypt(String secretKey, String salt, String value) throws Exception {
+			
+			Cipher cipher = initCipher(secretKey, salt, Cipher.ENCRYPT_MODE);
+			byte[] cipherText = cipher.doFinal(value.getBytes());
+			byte[] cipherWithIv = addIVToCipher(cipherText);
+			return Base64.getEncoder().encodeToString(cipherWithIv);
+	}
+
+	public static String decrypt(String secretKey, String salt, String encrypted) throws Exception {
+			
+			Cipher cipher = initCipher(secretKey, salt, Cipher.DECRYPT_MODE);
+			byte[] original = cipher.doFinal(Base64.getDecoder().decode(encrypted));
+			// unpad
+			byte[] originalWithoutIv = Arrays.copyOfRange(original, IV_CODE.length, original.length);
+			return new String(originalWithoutIv);
+	}
+
+	private static Cipher initCipher(String secretKey, String salt, int mode) throws Exception {
+			SecretKeyFactory factory = SecretKeyFactory.getInstance(FACTORY_INSTANCE);
+			KeySpec spec = new PBEKeySpec(secretKey.toCharArray(), salt.getBytes(), ITERATION_COUNT, KEY_LENGTH);
+			SecretKeySpec sKeySpec = new SecretKeySpec(factory.generateSecret(spec).getEncoded(), SECRET_KEY_TYPE);
+			Cipher cipher = Cipher.getInstance(CIPHER_INSTANCE);
+			// Generating random IV
+			SecureRandom random = new SecureRandom();
+			random.nextBytes(IV_CODE);
+			cipher.init(mode, sKeySpec, new IvParameterSpec(IV_CODE));
+			return cipher;
+	}
+
+	private static byte[] addIVToCipher(byte[] cipherText) {
+			
+			byte[] cipherWithIv = new byte[IV_CODE.length + cipherText.length];
+			System.arraycopy(IV_CODE, 0, cipherWithIv, 0, IV_CODE.length);
+			System.arraycopy(cipherText, 0, cipherWithIv, IV_CODE.length, cipherText.length);
+			return cipherWithIv;
+	}
+
 	/** socket listening thread */
-	private class InputThread extends Validator implements Runnable{
+	private class InputThread implements Runnable{
 		public void run() {
 			plugin.getLogger().info("Starting input thread");
 			while (running) {
 				try {
+					String fSalt = "anySaltYouCanUseOfOn";
 					String newLine = in.readLine(); //convert bytes to string
-					String[] vals = newLine.split(":yek"); //identifiy key
-					try {
-						final Key key = new Key(vals[1]); //deserialise key
-						final Token token = Token.fromString(vals[0]); //deserialise msg
-						final Validator<String> validator = new StringValidator() {
-						};
-						final String payload = token.validateAndDecrypt(key, validator); //check msg and key is the same
-						newLine = payload;
-					} catch (Exception e) {
-						newLine = "chat.post(Data has been tampered!)";
-					}
+					String strRes = decrypt(SECRET_KEY, fSalt, newLine);
+					strRes = strRes.substring(0, strRes.length() - 1);
+					newLine = strRes;
 					//System.out.println(newLine);
 					if (newLine == null) {
 						running = false;
