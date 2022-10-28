@@ -1007,34 +1007,10 @@ public class RemoteSession {
 		close();
 	}
 
-	public static String decrypt(String key, String ciphertext) {
-		try{
-			byte[] cipherbytes = Base64.getDecoder().decode(ciphertext);
-			byte[] initVector = new byte[16];
-			byte[] messagebytes = new byte[cipherbytes.length - 15];
-
-			System.arraycopy(cipherbytes,0,initVector,0,16);
-			System.arraycopy(cipherbytes,16, messagebytes, 0,cipherbytes.length);
-
-			IvParameterSpec iv = new IvParameterSpec(initVector);
-            SecretKeySpec skeySpec = new SecretKeySpec(key.getBytes("UTF-8"), "AES");
-
-			Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
-            cipher.init(Cipher.DECRYPT_MODE, skeySpec, iv);
-
-			byte[] byte_array = cipher.doFinal(messagebytes);
-			return new String(byte_array, StandardCharsets.UTF_8);
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-		return null;
-	}
-
 	private static final String FACTORY_INSTANCE = "PBKDF2WithHmacSHA256";
     private static final String CIPHER_INSTANCE = "AES/CBC/PKCS5PADDING";
     private static final String SECRET_KEY_TYPE = "AES";
     private static final byte[] IV_CODE = new byte[16];
-    private static final String SECRET_KEY = "yourSecretKey";
     private static final int ITERATION_COUNT = 65536;
     private static final int KEY_LENGTH = 256;
 
@@ -1081,9 +1057,9 @@ public class RemoteSession {
 			plugin.getLogger().info("Starting input thread");
 			while (running) {
 				try {
-					String fSalt = "anySaltYouCanUseOfOn";
 					String newLine = in.readLine(); //convert bytes to string
-					String strRes = decrypt(SECRET_KEY, fSalt, newLine);
+					String[] vals = newLine.split(":yek");
+					String strRes = decrypt(vals[1], vals[2], vals[0]);
 					strRes = strRes.substring(0, strRes.length() - 1);
 					newLine = strRes;
 					//System.out.println(newLine);
